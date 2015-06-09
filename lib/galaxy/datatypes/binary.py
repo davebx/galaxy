@@ -448,16 +448,58 @@ class Bam( Binary ):
 
 Binary.register_sniffable_binary_format("bam", "bam", Bam)
 
+
 class Bcf( Binary):
     """Class describing a BCF file"""
     edam_format = "format_3020"
     file_ext = "bcf"
 
-    MetadataElement( name="bcf_index", desc="BCF Index File", param=metadata.FileParameter, file_ext="csi", readonly=True, no_value=None, visible=False, optional=True )
+    MetadataElement( name="bcf_index", desc="BCF CSI Index File", param=metadata.FileParameter, file_ext="csi", readonly=True, no_value=None, visible=False, optional=True )
+    MetadataElement( name="tbi_index", desc="BCF TBI Index File", param=metadata.FileParameter, file_ext="tbi", readonly=True, no_value=None, visible=False, optional=True )
+
+    def dataset_content_needs_grooming( self, file_name ):
+        """See if file_name is a compressed BCF file"""
+        with open( file_name, 'r' ) as fh:
+            magic = fh.read(3)
+            if binascii.b2a_hex( magic ) == binascii.hexlify( 'BCF' ):
+                return True
+        return False
+
+    def groom_dataset_content( self, file_name ):
+        """
+        Ensures that the uploaded BCF file is bgzip-compressed.
+        """
+        if not self.dataset_content_needs_grooming( file_name ):
+            return
+        tmp_dir = tempfile.mkdtemp()
+        groomed_dataset_prefix = os.path.join( tmp_dir, 'compressed' )
+        stderr_name = tempfile.NamedTemporaryFile( dir = tmp_dir, prefix = "bcf_groom_stderr" ).name
+        bgzip_compressed_file_name = "%s.bcf.gz" % groomed_dataset_prefix
+        command = "bcftools view %s -O b -o %s" % ( file_name, bgzip_compressed_file_name )
+        proc = subprocess.Popen( args=command, shell=True, cwd=tmp_dir, stderr=open( stderr_name, 'wb' ) )
+        exit_code = proc.wait()
+        #Did sort succeed?
+        stderr = open( stderr_name ).read().strip()
+        if stderr:
+            if exit_code != 0:
+                shutil.rmtree( tmp_dir) #clean up
+                raise Exception, "Error Grooming BCF file contents: %s" % stderr
+            else:
+                print stderr
+        # Move samtools_created_sorted_file_name to our output dataset location
+        shutil.move( bgzip_compressed_file_name, file_name )
+        # Remove temp file and empty temporary directory
+        os.unlink( stderr_name )
+        os.rmdir( tmp_dir )
 
     def sniff( self, filename ):
-        # BCF is compressed in the BGZF format, and must not be uncompressed in Galaxy.
-        # The first 3 bytes of any bcf file is 'BCF', and the file is binary.
+        # BCF may be compressed in the BGZF format, and must not be uncompressed in Galaxy. If the BCF
+        # file is not compressed, the first 3 bytes will be 'BCF', and the file is binary. Otherwise,
+        # the first three bytes extracted with gzip.open will be 'BCF'. The dataset will require
+        # grooming in the former case.
+        uncompressed_header = file( filename, 'r' ).read(3)
+        if binascii.b2a_hex( uncompressed_header ) == binascii.hexlify( 'BCF' ):
+            return True
         try:
             header = gzip.open( filename ).read(3)
             if binascii.b2a_hex( header ) == binascii.hexlify( 'BCF' ):
@@ -469,35 +511,102 @@ class Bcf( Binary):
     def set_meta( self, dataset, overwrite = True, **kwd ):
         """ Creates the index for the BCF file. """
         # These metadata values are not accessible by users, always overwrite
-        index_file = dataset.metadata.bcf_index
-        if not index_file:
-            index_file = dataset.metadata.spec['bcf_index'].param.new_file( dataset = dataset )
-        # Create the bcf index
-        ##$ bcftools index
-        ##Usage: bcftools index <in.bcf>
+        for extension in [ 'tbi', 'bcf' ]:
+            index_name = '%s_index' % extension
+            index_file = getattr( dataset.metadata, index_name )
+            if not index_file:
+                index_file = dataset.metadata.spec[ index_name ].param.new_file( dataset = dataset )
+            # Create the bcf index
+            ##$ bcftools index
+            ##Usage: bcftools index <in.vcf.gz>
 
-        dataset_symlink = os.path.join( os.path.dirname( index_file.file_name ),
-                    '__dataset_%d_%s' % ( dataset.id, os.path.basename( index_file.file_name ) ) )
-        os.symlink( dataset.file_name, dataset_symlink )
+            dataset_symlink = os.path.join( os.path.dirname( index_file.file_name ),
+                        '__dataset_%d_%s_%s' % ( dataset.id, os.path.basename( index_file.file_name ), extension ) )
+            log.debug( dataset.file_name )
+            log.debug( dataset_symlink )
+            os.symlink( dataset.file_name, dataset_symlink )
 
-        stderr_name = tempfile.NamedTemporaryFile( prefix = "bcf_index_stderr" ).name
-        command = [ 'bcftools', 'index', dataset_symlink ]
-        proc = subprocess.Popen( args=command, stderr=open( stderr_name, 'wb' ) )
-        exit_code = proc.wait()
-        shutil.move( dataset_symlink + '.csi', index_file.file_name )
-
-        stderr = open( stderr_name ).read().strip()
-        if stderr:
-            if exit_code != 0:
-                os.unlink( stderr_name ) #clean up
-                raise Exception, "Error Setting BCF Metadata: %s" % stderr
+            stderr_name = tempfile.NamedTemporaryFile( prefix = "vcf_index_stderr" ).name
+            if extension == 'bcf':
+                command = [ 'bcftools', 'index', '--csi' % extension, dataset_symlink ]
+                proc = subprocess.Popen( args=command, stderr=open( stderr_name, 'wb' ) )
+                exit_code = proc.wait()
+                shutil.move( '%s.csi' % dataset_symlink, index_file.file_name )
             else:
-                print stderr
-        dataset.metadata.bcf_index = index_file
-        # Remove temp file
-        os.unlink( stderr_name )
+                command = [ 'bcftools', 'index', '--tbi' % extension, dataset_symlink ]
+                proc = subprocess.Popen( args=command, stderr=open( stderr_name, 'wb' ) )
+                exit_code = proc.wait()
+                shutil.move( '%s.%s' % ( dataset_symlink, extension ), index_file.file_name )
+
+            stderr = open( stderr_name ).read().strip()
+            if stderr:
+                if exit_code != 0:
+                    os.unlink( stderr_name ) #clean up
+                    raise Exception, "Error Setting VCF Metadata: %s" % stderr
+                else:
+                    print stderr
+            dataset.metadata.csi_index = index_file
+            # Remove temp file
+            os.unlink( stderr_name )
 
 Binary.register_sniffable_binary_format("bcf", "bcf", Bcf)
+
+
+class VcfBgzip( Binary ):
+    """Class describing a VCF-BGZip file"""
+    edam_format = "format_3016"
+    file_ext = "vcf_bgzip"
+
+    MetadataElement( name="csi_index", desc="VCF CSI Index File", param=metadata.FileParameter, file_ext="csi", readonly=True, no_value=None, visible=False, optional=True )
+    MetadataElement( name="tbi_index", desc="VCF TBI Index File", param=metadata.FileParameter, file_ext="tbi", readonly=True, no_value=None, visible=False, optional=True )
+
+    def sniff( self, filename ):
+        # VCF-BGZip is compressed in the BGZF format, and must not be uncompressed in Galaxy.
+        # The first line of any vcf file describes the VCF format.
+        try:
+            header = gzip.open( filename ).read(16)
+            if binascii.b2a_hex( header ) == binascii.hexlify( '##fileformat=VCF' ):
+                return True
+            return False
+        except:
+            return False
+
+    def set_meta( self, dataset, overwrite = True, **kwd ):
+        """ Creates the indexes for the VCF-BGZip file. """
+        # These metadata values are not accessible by users, always overwrite
+        for extension in [ 'tbi', 'csi' ]:
+            index_name = '%s_index' % extension
+            index_file = getattr( dataset.metadata, index_name )
+            if not index_file:
+                index_file = dataset.metadata.spec[ index_name ].param.new_file( dataset = dataset )
+            # Create the bcf index
+            ##$ bcftools index
+            ##Usage: bcftools index <in.vcf.gz>
+
+            dataset_symlink = os.path.join( os.path.dirname( index_file.file_name ),
+                        '__dataset_%d_%s_%s' % ( dataset.id, os.path.basename( index_file.file_name ), extension ) )
+            log.debug( dataset.file_name )
+            log.debug( dataset_symlink )
+            os.symlink( dataset.file_name, dataset_symlink )
+
+            stderr_name = tempfile.NamedTemporaryFile( prefix = "vcf_index_stderr" ).name
+            command = [ 'bcftools', 'index', '--%s' % extension, dataset_symlink ]
+            proc = subprocess.Popen( args=command, stderr=open( stderr_name, 'wb' ) )
+            exit_code = proc.wait()
+            shutil.move( '%s.%s' % ( dataset_symlink, extension ), index_file.file_name )
+
+            stderr = open( stderr_name ).read().strip()
+            if stderr:
+                if exit_code != 0:
+                    os.unlink( stderr_name ) #clean up
+                    raise Exception, "Error Setting VCF Metadata: %s" % stderr
+                else:
+                    print stderr
+            dataset.metadata.csi_index = index_file
+            # Remove temp file
+            os.unlink( stderr_name )
+
+Binary.register_sniffable_binary_format("vcf_bgzip", "vcf_bgzip", VcfBgzip)
 
 
 class H5( Binary ):
