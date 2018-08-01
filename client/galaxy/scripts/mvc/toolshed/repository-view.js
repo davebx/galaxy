@@ -189,7 +189,6 @@ var ToolShedRepositoryView = Backbone.View.extend({
         });
         $(".global-select-tps-button").on("click", () => {
             $("#tool_panel_section").replaceWith(this.options.tps_template_global_select(this.options));
-            this.propagateTPS();
             this.bindEvents();
         });
         $(".global-create-tps-button").on("click", () => {
@@ -362,18 +361,6 @@ var ToolShedRepositoryView = Backbone.View.extend({
             this.showToolTPSCreate(guid, changeset);
         });
         this.bindEvents();
-    },
-
-    propagateTPS: function() {
-        $("#tool_panel_section_select").change(() => {
-            var new_tps = $("#tool_panel_section_select")
-                .find("option:selected")
-                .val();
-            $('.tool_panel_section_picker[default="active"]').each(obj => {
-                obj.val(new_tps);
-            });
-        });
-        this.toolTPSSelectionEvents();
     },
 
     toolTPSSelectionEvents: function() {
