@@ -187,6 +187,8 @@ if [ $DEV_WHEELS -eq 1 ]; then
     requirement_args="$requirement_args -r ${GALAXY_DEV_REQUIREMENTS}"
 fi
 
+[ "$CI" = 'true' ] && export PIP_PROGRESS_BAR=off
+
 if [ $FETCH_WHEELS -eq 1 ]; then
     pip install $requirement_args --index-url "${GALAXY_WHEELS_INDEX_URL}" --extra-index-url "${PYPI_INDEX_URL}"
     GALAXY_CONDITIONAL_DEPENDENCIES=$(PYTHONPATH=lib python -c "from __future__ import print_function; import galaxy.dependencies; print('\n'.join(galaxy.dependencies.optional('$GALAXY_CONFIG_FILE')))")
