@@ -274,6 +274,7 @@ def populate_api_routes(webapp, app):
                               name_prefix="history_content_",
                               path_prefix='/api/histories/{history_id}/contents/{history_content_id}')
     webapp.mapper.connect('/api/histories/published', action='published', controller="histories", conditions=dict(method=["GET"]))
+    webapp.mapper.connect('/api/histories/current', action='current', controller="histories", conditions=dict(method=["GET"]))
     webapp.mapper.connect('/api/histories/shared_with_me', action='shared_with_me', controller="histories")
 
     webapp.mapper.connect('cloud_storage',

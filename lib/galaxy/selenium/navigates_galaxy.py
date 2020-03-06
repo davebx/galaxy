@@ -208,7 +208,7 @@ class NavigatesGalaxy(HasDriver):
         return self.history_panel_name_element().text
 
     def current_history(self):
-        history = self.api_get("histories")[0]
+        history = self.api_get("histories/current")
         return history
 
     def current_history_id(self):

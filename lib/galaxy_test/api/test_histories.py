@@ -21,6 +21,9 @@ class HistoriesApiTestCase(ApiTestCase):
         self.dataset_collection_populator = DatasetCollectionPopulator(self.galaxy_interactor)
 
     def test_create_history(self):
+        # Save the current history ID
+        current_history = self._get('histories/current')
+        current_id = current_history['id']
         # Create a history.
         create_response = self._create_history("TestHistory1")
         created_id = create_response["id"]
@@ -28,7 +31,10 @@ class HistoriesApiTestCase(ApiTestCase):
         # Make sure new history appears in index of user's histories.
         index_response = self._get("histories").json()
         indexed_history = [h for h in index_response if h["id"] == created_id][0]
+        created_history = self._get('histories/current')
+        api_created_id = created_history ['id']
         self.assertEqual(indexed_history["name"], "TestHistory1")
+        self.assertEqual(api_created_id, created_id)
 
     def test_show_history(self):
         history_id = self._create_history("TestHistoryForShow")["id"]

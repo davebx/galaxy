@@ -245,6 +245,22 @@ class HistoriesController(BaseAPIController, ExportsHistoryMixin, ImportsHistory
             tool_ids.add(tool_id)
         return [citation.to_dict("bibtex") for citation in self.citations_manager.citations_for_tool_ids(tool_ids)]
 
+    @expose_api_anonymous
+    def current(self, trans, **kwd):
+        """
+        GET /api/histories/current
+        Return the user's currently active history.
+
+        :rtype:     dictionary
+        :returns:   detailed information about one history
+        """
+        user = self.user_manager.current_user(trans)
+        history = self.manager.get_current(trans)
+        if not history:
+            return {}
+        return self.serializer.serialize_to_view(history, user=user, trans=trans,
+            **self._parse_serialization_params(kwd, 'summary'))
+
     @expose_api_anonymous_and_sessionless
     def published(self, trans, **kwd):
         """
