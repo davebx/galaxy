@@ -9,6 +9,37 @@ class HistoryMultiViewTestCase(SeleniumTestCase):
     ensure_registered = True
 
     @selenium_test
+    def test_switch_history(self):
+        '''
+        1. Load the multi history view. There should be a selector for the button
+           to create a new history.
+        2. Create a new history. This *should* automatically switch to the newly
+           created history.
+        3. Switch back to the original history. A button should appear on the old,
+           previously created history that allows switching back to that one, and
+           the history ID should now match the ID of the history with which we
+           started.
+        '''
+        self.home()
+        original_history_id = self.current_history_id()
+        # Load the multi-view
+        self.components.history_panel.multi_view_button.wait_for_and_click()
+        # Creating a new history should automatically switch to it
+        self.components.multi_history_view.create_new_button.wait_for_and_click()
+        new_history_id = self.current_history_id()
+        # Otherwise this assertion would fail
+        self.screenshot("multi_history_switch_created_history")
+        self.assertNotEqual(original_history_id, new_history_id)
+        # Switch back to the original history
+        switch_button = self.components.multiple_histories._(history_id=original_history_id).switch_button
+        # self.wait_for_visible(switch_button)
+        switch_button.wait_for_and_click()
+        new_switch_button = self.components.multiple_histories._(history_id=new_history_id).switch_button
+        self.wait_for_visible(new_switch_button)
+        self.screenshot("multi_history_switch_changed_history")
+        self.assertEqual(original_history_id, self.current_history_id())
+
+    @selenium_test
     def test_create_new_old_slides_next(self):
         history_id = self.current_history_id()
         input_collection = self.dataset_collection_populator.create_list_in_history(history_id, contents=["0", "1", "0", "1"]).json()

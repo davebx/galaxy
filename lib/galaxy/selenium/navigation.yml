@@ -176,6 +176,11 @@ multi_history_view:
     create_new_button: '.create-new'
     drag_drop_help: '.history-drop-target-help'
 
+multiple_histories:
+  selectors:
+    _: '#history-column-${history_id}'
+    switch_button: '${_} button.switch-to'
+
 history_copy_elements:
 
   selectors:
