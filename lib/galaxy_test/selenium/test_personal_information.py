@@ -14,9 +14,11 @@ class ManageInformationTestCase(SeleniumTestCase):
         api_key = self.get_api_key()
         self.navigate_to_user_preferences()
         self.components.preferences.manage_api_key.wait_for_and_click()
-        # api_key_field = self.driver.find_element_by_css_selector("[data-label='Current API key:'] > input")
-        api_key_field = self.driver.find_element_by_xpath("//div[@data-label='Current&nbsp;API&nbsp;key:']/input")
-        api_key_field.wait_for_visible()
+        self.sleep_for(self.wait_types.UX_RENDER)
+
+        api_key_field = self.driver.find_element_by_css_selector("[data-label='Current API key:'] > input")
+        # api_key_field = self.driver.find_element_by_xpath("//div[@data-label='Current&nbsp;API&nbsp;key:']/input")
+        # api_key_field.wait_for_visible()
         raise NameError(api_key_field.text)
 
         self.sleep_for(self.wait_types.SHED_SEARCH)
