@@ -6,6 +6,21 @@ from .framework import (
 
 class ManageInformationTestCase(SeleniumTestCase):
 
+
+    @selenium_test
+    def test_api_key(self):
+        self.login()
+        self.assertEqual(self.get_api_key(), 'Not available.')
+        api_key = self.get_api_key()
+        self.navigate_to_user_preferences()
+        self.components.preferences.manage_api_key.wait_for_and_click()
+        # api_key_field = self.driver.find_element_by_css_selector("[data-label='Current API key:'] > input")
+        api_key_field = self.driver.find_element_by_xpath("//div[@data-label='Current&nbsp;API&nbsp;key:']/input")
+        api_key_field.wait_for_visible()
+        raise NameError(api_key_field.text)
+
+        self.sleep_for(self.wait_types.SHED_SEARCH)
+
     @selenium_test
     def test_change_email(self):
         def assert_email(email_to_check):
